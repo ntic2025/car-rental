@@ -1,0 +1,462 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Location de Voitures</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+  <!-- Barre de navigation -->
+  <nav class="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-4 shadow-lg">
+    <div class="container mx-auto px-4 flex justify-between items-center">
+      <h1 class="text-2xl font-extrabold tracking-tight">🚗 Location de Voitures</h1>
+      <div class="space-x-2">
+        <button id="home-btn" class="px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300"><i class="fas fa-home mr-1"></i> Accueil</button>
+        <button id="cars-btn" class="px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300"><i class="fas fa-car mr-1"></i> Voitures</button>
+        <button id="reservations-btn" class="px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300"><i class="fas fa-calendar-check mr-1"></i> Réservations</button>
+        <button id="login-btn" class="px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300"><i class="fas fa-sign-in-alt mr-1"></i> Connexion</button>
+        <button id="logout-btn" class="px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300 hidden"><i class="fas fa-sign-out-alt mr-1"></i> Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Contenu principal -->
+  <main id="main-content" class="container mx-auto px-4 py-8 min-h-screen">
+    <!-- Page d'accueil -->
+    <section id="home-page" class="bg-white p-8 rounded-xl shadow-lg max-w-2xl mx-auto text-center transform transition duration-500">
+      <h2 class="text-3xl font-bold mb-4 text-blue-800">Bienvenue chez nous !</h2>
+      <p class="text-gray-600 mb-6">Louez la voiture de vos rêves en quelques clics. Parcourez notre catalogue et réservez dès maintenant !</p>
+      <button id="get-started-btn" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300"><i class="fas fa-rocket mr-2"></i> Commencer</button>
+    </section>
+
+    <!-- Page d'authentification -->
+    <section id="login-page" class="bg-white p-8 rounded-xl shadow-lg max-w-md mx-auto hidden">
+      <h2 class="text-2xl font-semibold mb-6 text-blue-800"><i class="fas fa-lock mr-2"></i> Connexion</h2>
+      <div class="mb-4">
+        <label for="username" class="block text-gray-700 font-medium">Nom d'utilisateur</label>
+        <input type="text" id="username" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="admin">
+      </div>
+      <div class="mb-4">
+        <label for="password" class="block text-gray-700 font-medium">Mot de passe</label>
+        <input type="password" id="password" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="admin123">
+      </div>
+      <button id="submit-login" class="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition duration-300"><i class="fas fa-sign-in-alt mr-2"></i> Se connecter</button>
+      <p id="login-message" class="mt-4 text-red-600 hidden"></p>
+    </section>
+
+    <!-- Page des voitures -->
+    <section id="cars-page" class="hidden">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-semibold text-blue-800"><i class="fas fa-car mr-2"></i> Nos voitures</h2>
+        <button id="add-car-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300 hidden"><i class="fas fa-plus mr-2"></i> Ajouter une voiture</button>
+      </div>
+      <div class="mb-6 flex flex-col sm:flex-row gap-4">
+        <input type="text" id="search-car" class="w-full sm:w-1/2 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Rechercher par modèle...">
+        <label class="flex items-center">
+          <input type="checkbox" id="available-filter" class="mr-2">
+          <span class="text-gray-700">Afficher uniquement les voitures disponibles</span>
+        </label>
+      </div>
+      <div id="car-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </section>
+
+    <!-- Page des réservations -->
+    <section id="reservations-page" class="bg-white p-8 rounded-xl shadow-lg hidden">
+      <h2 class="text-2xl font-semibold mb-6 text-blue-800"><i class="fas fa-calendar-check mr-2"></i> Réservations</h2>
+      <div id="reservation-list" class="mb-6"></div>
+      <div id="reservation-form">
+        <h3 class="text-lg font-semibold mb-4">Nouvelle réservation</h3>
+        <div class="mb-4">
+          <label for="car-select" class="block text-gray-700 font-medium">Choisir une voiture</label>
+          <select id="car-select" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"></select>
+        </div>
+        <div class="mb-4">
+          <label for="start-date" class="block text-gray-700 font-medium">Date de début</label>
+          <input type="date" id="start-date" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="mb-4">
+          <label for="end-date" class="block text-gray-700 font-medium">Date de fin</label>
+          <input type="date" id="end-date" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+        </div>
+        <p id="cost-estimate" class="text-gray-600 mb-4 hidden"></p>
+        <button id="reserve-btn" class="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition duration-300"><i class="fas fa-check mr-2"></i> Réserver</button>
+      </div>
+      <p id="reservation-message" class="mt-4 text-green-600 hidden"></p>
+    </section>
+
+    <!-- Modal pour ajouter/modifier une voiture -->
+    <div id="car-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+      <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full">
+        <h3 id="car-form-title" class="text-lg font-semibold mb-4 text-blue-800">Ajouter une voiture</h3>
+        <input type="hidden" id="car-id">
+        <div class="mb-4">
+          <label for="car-model" class="block text-gray-700 font-medium">Modèle</label>
+          <input type="text" id="car-model" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="mb-4">
+          <label for="car-price" class="block text-gray-700 font-medium">Prix (€/jour)</label>
+          <input type="number" id="car-price" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="mb-4">
+          <label for="car-image" class="block text-gray-700 font-medium">URL de l'image</label>
+          <input type="text" id="car-image" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="https://via.placeholder.com/300x200?text=Voiture">
+        </div>
+        <div class="mb-4">
+          <label for="car-available" class="block text-gray-700 font-medium">Disponible</label>
+          <input type="checkbox" id="car-available" class="p-2">
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="cancel-car" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 transition duration-300">Annuler</button>
+          <button id="submit-car" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300"><i class="fas fa-save mr-2"></i> Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Pied de page -->
+  <footer class="bg-gray-800 text-white py-6">
+    <div class="container mx-auto px-4 text-center">
+      <p>© 2025 Location de Voitures. Tous droits réservés.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Données initiales
+    let cars = JSON.parse(localStorage.getItem('cars')) || [
+      { id: 1, model: "Toyota Corolla", price: 25, available: true, image: "https://via.placeholder.com/300x200?text=Toyota+Corolla" },
+      { id: 2, model: "Honda Civic", price: 30, available: true, image: "https://via.placeholder.com/300x200?text=Honda+Civic" },
+      { id: 3, model: "Ford Mustang", price: 50, available: false, image: "https://via.placeholder.com/300x200?text=Ford+Mustang" },
+    ];
+    let reservations = JSON.parse(localStorage.getItem('reservations')) || [];
+    let isLoggedIn = JSON.parse(localStorage.getItem('isLoggedIn')) || false;
+
+    // Mettre à jour l'état de la navigation
+    function updateNav() {
+      document.getElementById('login-btn').classList.toggle('hidden', isLoggedIn);
+      document.getElementById('logout-btn').classList.toggle('hidden', !isLoggedIn);
+      document.getElementById('add-car-btn').classList.toggle('hidden', !isLoggedIn);
+    }
+
+    // Afficher une page spécifique
+    function showPage(pageId) {
+      document.querySelectorAll('main > section').forEach(section => section.classList.add('hidden'));
+      document.getElementById(pageId).classList.remove('hidden');
+      document.getElementById('car-modal').classList.add('hidden');
+    }
+
+    // Afficher la liste des voitures
+    function displayCars(filter = '', showOnlyAvailable = false) {
+      const carList = document.getElementById('car-list');
+      carList.innerHTML = '';
+      cars
+        .filter(car => car.model.toLowerCase().includes(filter.toLowerCase()))
+        .filter(car => !showOnlyAvailable || car.available)
+        .forEach(car => {
+          const carCard = `
+            <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition duration-300">
+              <img src="${car.image}" alt="${car.model}" class="w-full h-48 object-cover rounded-lg mb-4">
+              <h3 class="text-lg font-semibold text-blue-800">${car.model}</h3>
+              <p class="text-gray-600">Prix: ${car.price}€/jour</p>
+              <p class="text-gray-600">${car.available ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i> Disponible</span>' : '<span class="text-red-600"><i class="fas fa-times-circle mr-1"></i> Non disponible</span>'}</p>
+              ${isLoggedIn ? `
+                <div class="mt-4 flex gap-2">
+                  <button onclick="editCar(${car.id})" class="bg-yellow-500 text-white px-3 py-1 rounded-lg hover:bg-yellow-600 transition duration-300"><i class="fas fa-edit mr-1"></i> Modifier</button>
+                  <button onclick="deleteCar(${car.id})" class="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition duration-300"><i class="fas fa-trash mr-1"></i> Supprimer</button>
+                </div>
+              ` : ''}
+            </div>
+          `;
+          carList.insertAdjacentHTML('beforeend', carCard);
+        });
+    }
+
+    // Afficher les réservations
+    function displayReservations() {
+      const reservationList = document.getElementById('reservation-list');
+      reservationList.innerHTML = '';
+      reservations.forEach((res, index) => {
+        const car = cars.find(c => c.id == res.carId);
+        const duration = (new Date(res.endDate) - new Date(res.startDate)) / (1000 * 60 * 60 * 24);
+        const cost = car ? (duration * car.price).toFixed(2) : 'N/A';
+        const resItem = `
+          <div class="bg-gray-100 p-4 rounded-lg mb-4 flex justify-between items-center">
+            <div>
+              <p><strong>Voiture:</strong> ${car ? car.model : 'Inconnue'}</p>
+              <p><strong>Dates:</strong> ${res.startDate} au ${res.endDate}</p>
+              <p><strong>Coût estimé:</strong> ${cost}€</p>
+            </div>
+            ${isLoggedIn ? `
+              <button onclick="deleteReservation(${index})" class="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition duration-300"><i class="fas fa-trash mr-1"></i> Supprimer</button>
+            ` : ''}
+          </div>
+        `;
+        reservationList.insertAdjacentHTML('beforeend', resItem);
+      });
+    }
+
+    // Remplir le menu déroulant des voitures disponibles
+    function updateCarSelect() {
+      const carSelect = document.getElementById('car-select');
+      carSelect.innerHTML = '<option value="">Sélectionner une voiture</option>';
+      cars.filter(car => car.available).forEach(car => {
+        const option = `<option value="${car.id}">${car.model} - ${car.price}€/jour</option>`;
+        carSelect.insertAdjacentHTML('beforeend', option);
+      });
+    }
+
+    // Calculer le coût estimé
+    function calculateCost() {
+      const carId = document.getElementById('car-select').value;
+      const startDate = document.getElementById('start-date').value;
+      const endDate = document.getElementById('end-date').value;
+      const costEstimate = document.getElementById('cost-estimate');
+      if (carId && startDate && endDate) {
+        const car = cars.find(c => c.id == carId);
+        const duration = (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24);
+        if (duration > 0 && car) {
+          const cost = (duration * car.price).toFixed(2);
+          costEstimate.textContent = `Coût estimé: ${cost}€ pour ${Math.round(duration)} jour(s)`;
+          costEstimate.classList.remove('hidden');
+        } else {
+          costEstimate.classList.add('hidden');
+        }
+      } else {
+        costEstimate.classList.add('hidden');
+      }
+    }
+
+    // Vérifier les conflits de réservation
+    function hasReservationConflict(carId, startDate, endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      return reservations.some(res => {
+        if (res.carId != carId) return false;
+        const resStart = new Date(res.startDate);
+        const resEnd = new Date(res.endDate);
+        return (start <= resEnd && end >= resStart);
+      });
+    }
+
+    // Connexion
+    document.getElementById('submit-login').addEventListener('click', () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const message = document.getElementById('login-message');
+      if (username === 'admin' && password === 'admin123') {
+        isLoggedIn = true;
+        localStorage.setItem('isLoggedIn', true);
+        message.classList.add('hidden');
+        updateNav();
+        showPage('home-page');
+      } else {
+        message.textContent = 'Nom d’utilisateur ou mot de passe incorrect.';
+        message.classList.remove('hidden');
+      }
+    });
+
+    // Déconnexion
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      isLoggedIn = false;
+      localStorage.setItem('isLoggedIn', false);
+      updateNav();
+      showPage('home-page');
+    });
+
+    // Recherche et filtrage des voitures
+    document.getElementById('search-car').addEventListener('input', (e) => {
+      displayCars(e.target.value, document.getElementById('available-filter').checked);
+    });
+    document.getElementById('available-filter').addEventListener('change', (e) => {
+      displayCars(document.getElementById('search-car').value, e.target.checked);
+    });
+
+    // Ajouter/Modifier une voiture
+    document.getElementById('add-car-btn').addEventListener('click', () => {
+      document.getElementById('car-form-title').textContent = 'Ajouter une voiture';
+      document.getElementById('car-id').value = '';
+      document.getElementById('car-model').value = '';
+      document.getElementById('car-price').value = '';
+      document.getElementById('car-image').value = 'https://via.placeholder.com/300x200?text=Voiture';
+      document.getElementById('car-available').checked = true;
+      document.getElementById('car-modal').classList.remove('hidden');
+    });
+
+    document.getElementById('cancel-car').addEventListener('click', () => {
+      document.getElementById('car-modal').classList.add('hidden');
+    });
+
+    document.getElementById('submit-car').addEventListener('click', () => {
+      const id = document.getElementById('car-id').value;
+      const model = document.getElementById('car-model').value;
+      const price = parseFloat(document.getElementById('car-price').value);
+      const image = document.getElementById('car-image').value;
+      const available = document.getElementById('car-available').checked;
+
+      if (!model || !price || !image) {
+        alert('Veuillez remplir tous les champs.');
+        return;
+      }
+
+      if (id) {
+        const car = cars.find(c => c.id == id);
+        car.model = model;
+        car.price = price;
+        car.image = image;
+        car.available = available;
+      } else {
+        cars.push({
+          id: cars.length ? Math.max(...cars.map(c => c.id)) + 1 : 1,
+          model,
+          price,
+          image,
+          available
+        });
+      }
+
+      localStorage.setItem('cars', JSON.stringify(cars));
+      displayCars(document.getElementById('search-car').value, document.getElementById('available-filter').checked);
+      updateCarSelect();
+      document.getElementById('car-modal').classList.add('hidden');
+    });
+
+    // Modifier une voiture
+    window.editCar = (id) => {
+      const car = cars.find(c => c.id == id);
+      document.getElementById('car-form-title').textContent = 'Modifier une voiture';
+      document.getElementById('car-id').value = car.id;
+      document.getElementById('car-model').value = car.model;
+      document.getElementById('car-price').value = car.price;
+      document.getElementById('car-image').value = car.image;
+      document.getElementById('car-available').checked = car.available;
+      document.getElementById('car-modal').classList.remove('hidden');
+    };
+
+    // Supprimer une voiture
+    window.deleteCar = (id) => {
+      if (confirm('Voulez-vous vraiment supprimer cette voiture ?')) {
+        cars = cars.filter(c => c.id != id);
+        localStorage.setItem('cars', JSON.stringify(cars));
+        displayCars(document.getElementById('search-car').value, document.getElementById('available-filter').checked);
+        updateCarSelect();
+      }
+    };
+
+    // Supprimer une réservation
+    window.deleteReservation = (index) => {
+      if (confirm('Voulez-vous vraiment supprimer cette réservation ?')) {
+        reservations.splice(index, 1);
+        localStorage.setItem('reservations', JSON.stringify(reservations));
+        displayReservations();
+      }
+    };
+
+    // Réserver une voiture
+    document.getElementById('reserve-btn').addEventListener('click', () => {
+      const carId = document.getElementById('car-select').value;
+      const startDate = document.getElementById('start-date').value;
+      const endDate = document.getElementById('end-date').value;
+      const message = document.getElementById('reservation-message');
+
+      if (!carId || !startDate || !endDate) {
+        message.textContent = 'Veuillez remplir tous les champs.';
+        message.classList.remove('text-green-600', 'hidden');
+        message.classList.add('text-red-600');
+        return;
+      }
+
+      if (new Date(endDate) <= new Date(startDate)) {
+        message.textContent = 'La date de fin doit être postérieure à la date de début.';
+        message.classList.remove('text-green-600', 'hidden');
+        message.classList.add('text-red-600');
+        return;
+      }
+
+      if (hasReservationConflict(carId, startDate, endDate)) {
+        message.textContent = 'Cette voiture est déjà réservée pour ces dates.';
+        message.classList.remove('text-green-600', 'hidden');
+        message.classList.add('text-red-600');
+        return;
+      }
+
+      reservations.push({ carId: parseInt(carId), startDate, endDate });
+      localStorage.setItem('reservations', JSON.stringify(reservations));
+      message.textContent = 'Réservation confirmée !';
+      message.classList.remove('text-red-600', 'hidden');
+      message.classList.add('text-green-600');
+      displayReservations();
+      calculateCost();
+    });
+
+    // Mettre à jour le coût estimé en temps réel
+    document.getElementById('car-select').addEventListener('change', calculateCost);
+    document.getElementById('start-date').addEventListener('change', calculateCost);
+    document.getElementById('end-date').addEventListener('change', calculateCost);
+
+    // Navigation
+    document.getElementById('home-btn').addEventListener('click', () => showPage('home-page'));
+    document.getElementById('cars-btn').addEventListener('click', () => {
+      showPage('cars-page');
+      displayCars();
+    });
+    document.getElementById('reservations-btn').addEventListener('click', () => {
+      showPage('reservations-page');
+      displayReservations();
+      updateCarSelect();
+    });
+    document.getElementById('login-btn').addEventListener('click', () => showPage('login-page'));
+    document.getElementById('get-started-btn').addEventListener('click', () => {
+      if (isLoggedIn) {
+        showPage('cars-page');
+        displayCars();
+      } else {
+        showPage('login-page');
+      }
+    });
+
+    // Initialisation
+    updateNav();
+    showPage('home-page');
+  </script>
+</body>
+</html>
